@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isHost() {
+      return signedIn() &&
+        exists(/databases/$(db)/documents/hosts/$(request.auth.uid));
+    }
+
+    match /hosts/{uid} {
+      allow read: if request.auth.uid == uid;
+      allow write: if false;            // edit in the Firebase console only
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 2
+        && request.resource.data.displayName.size() <= 20
+        && request.resource.data.lastMessageAt == request.time
+        && (resource == null
+            || !('lastMessageAt' in resource.data)
+            || request.time > resource.data.lastMessageAt + duration.value(2, 's'));
+    }
+
+    match /rooms/{room} {
+      allow read: if true;
+      allow write: if isHost();         // pin and alert
+
+      match /messages/{id} {
+        allow read: if resource.data.hidden == false || isHost();
+
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['uid', 'displayName', 'body', 'isHost', 'hidden', 'createdAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() >= 2
+          && request.resource.data.displayName.size() <= 20
+          && request.resource.data.displayName == getAfter(/databases/$(db)/documents/users/$(request.auth.uid)).data.displayName
+          && request.resource.data.body is string
+          && request.resource.data.body.size() >= 1
+          && request.resource.data.body.size() <= 280
+          && request.resource.data.hidden == false
+          && request.resource.data.createdAt == request.time
+          && (request.resource.data.isHost == false || isHost())
+          && getAfter(/databases/$(db)/documents/users/$(request.auth.uid))
+               .data.lastMessageAt == request.time;
+
+        allow update: if isHost()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hidden']);
+        allow delete: if false;
+      }
+    }
+
+    match /optIns/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          'email', 'firstName', 'phone',
+          'consentTerms', 'consentMarketingEmail',
+          'consentSmsService', 'consentSmsMarketing',
+          'consentedAt', 'source'
+        ])
+        && request.resource.data.email is string
+        && request.resource.data.email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$')
+        && request.resource.data.consentTerms == true
+        && request.resource.data.consentMarketingEmail is bool
+        && request.resource.data.consentSmsService is bool
+        && request.resource.data.consentSmsMarketing is bool
+        && request.resource.data.consentedAt == request.time
+        && (
+          (request.resource.data.consentSmsService == false
+            && request.resource.data.consentSmsMarketing == false)
+          || (request.resource.data.phone is string
+            && request.resource.data.phone.size() > 0)
+        )
+        && (!('firstName' in request.resource.data) || request.resource.data.firstName is string)
+        && (!('phone' in request.resource.data) || request.resource.data.phone is string)
+        && (!('source' in request.resource.data) || request.resource.data.source is string);
+      allow read, update, delete: if false;
+    }
+  }
+}

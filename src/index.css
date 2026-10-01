@@ -1,0 +1,228 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --black: #000000; /* hero and section backgrounds */
+  --brown: #221B08; /* main page background */
+  --brown-raised: #322713; /* alternate sections */
+  --surface: #0E0E0E; /* highlighted card, chat panel */
+  --surface-2: #191A1C; /* WhatsApp/QR card */
+  --border: #716A57; /* card and input borders */
+  --text: #E6E5E3; /* main text (warm off-white) */
+  --text-muted: #A39F94; /* secondary text */
+  --numeral: #5B5441; /* faded "01 02 03" numbers */
+  --pink: #CC006D; /* solid main button, HOST badge, alert */
+  --logo-pink: #F9036E;
+  --logo-yellow: #FEC300;
+  --rainbow: linear-gradient(
+    90deg,
+    #C51361 0%,
+    #B65700 22%,
+    #816F09 38%,
+    #458C46 55%,
+    #00A5B1 72%,
+    #1B65AC 86%,
+    #32296C 100%
+  );
+  --radius: 0px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    margin: 0;
+    background: var(--brown);
+    color: var(--text);
+    font-family: Figtree, "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+}
+
+@layer utilities {
+  .bg-rainbow {
+    background-image: var(--rainbow);
+    background-repeat: no-repeat;
+  }
+
+  .text-rainbow {
+    background-image: var(--rainbow);
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+}
+
+/*
+  The Crowdpurr iframe is a direct child of .player-layout and stays there.
+  Drawer, resize, and rotation change this CSS only.
+*/
+.player-layout {
+  position: relative;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--brown);
+  color: var(--text);
+}
+
+.player-header {
+  display: none;
+}
+
+.player-iframe {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--black);
+}
+
+/* Covers Crowdpurr's default wordmark. Same parent as the iframe, so the frame never remounts. */
+.iframe-brand {
+  position: absolute;
+  z-index: 5;
+  top: 3.6rem;
+  left: 50%;
+  display: flex;
+  width: 16.5rem;
+  height: 6.6rem;
+  transform: translateX(-50%);
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.iframe-brand::before {
+  content: "";
+  position: absolute;
+  top: 58%;
+  left: 50%;
+  width: 15.5rem;
+  height: 3.4rem;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0d2a50 0%, #081c42 100%);
+  filter: blur(10px);
+}
+
+.iframe-brand img {
+  position: relative;
+  width: 15.5rem;
+  height: 6.4rem;
+  object-fit: cover;
+  object-position: center 36%;
+}
+
+.chat-shell {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: flex;
+  height: 70dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border-top: 1.5px solid var(--border);
+  transform: translateY(100%);
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    transform 200ms ease,
+    visibility 0s linear 200ms;
+}
+
+.player-layout.drawer-open .chat-shell {
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    transform 200ms ease,
+    visibility 0s linear 0s;
+}
+
+.chat-close {
+  display: inline-flex;
+}
+
+.chat-fab {
+  position: absolute;
+  z-index: 30;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.player-layout.drawer-open .chat-fab {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .player-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .player-header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    flex-direction: column;
+    background: var(--brown);
+  }
+
+  .player-iframe {
+    position: relative;
+    inset: auto;
+    grid-column: 1;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .iframe-brand {
+    grid-column: 1;
+    grid-row: 2;
+    left: 37.5%;
+  }
+
+  .chat-shell {
+    position: relative;
+    z-index: auto;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    height: auto;
+    transform: none;
+    border-top: 0;
+    border-left: 1.5px solid var(--border);
+    visibility: visible;
+    pointer-events: auto;
+    transition: none;
+  }
+
+  .chat-close,
+  .drawer-whatsapp,
+  .chat-fab,
+  .player-layout.drawer-open .chat-fab {
+    display: none;
+  }
+}

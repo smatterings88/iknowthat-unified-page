@@ -1,0 +1,11 @@
+{
+  "rules": {
+    "presence": {
+      // World-readable for the prototype. Restrict this later.
+      "$room": {
+        ".read": true,
+        "$uid": { ".write": "auth != null && auth.uid === $uid" }
+      }
+    }
+  }
+}
