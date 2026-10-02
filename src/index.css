@@ -90,42 +90,6 @@
   background: var(--black);
 }
 
-/* Covers Crowdpurr's default wordmark. Same parent as the iframe, so the frame never remounts. */
-.iframe-brand {
-  position: absolute;
-  z-index: 5;
-  top: 3.6rem;
-  left: 50%;
-  display: flex;
-  width: 16.5rem;
-  height: 6.6rem;
-  transform: translateX(-50%);
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-
-.iframe-brand::before {
-  content: "";
-  position: absolute;
-  top: 58%;
-  left: 50%;
-  width: 15.5rem;
-  height: 3.4rem;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: linear-gradient(90deg, #0d2a50 0%, #081c42 100%);
-  filter: blur(10px);
-}
-
-.iframe-brand img {
-  position: relative;
-  width: 15.5rem;
-  height: 6.4rem;
-  object-fit: cover;
-  object-position: center 36%;
-}
-
 .chat-shell {
   position: absolute;
   right: 0;
@@ -197,12 +161,6 @@
     width: 100%;
     height: 100%;
     min-height: 0;
-  }
-
-  .iframe-brand {
-    grid-column: 1;
-    grid-row: 2;
-    left: 37.5%;
   }
 
   .chat-shell {

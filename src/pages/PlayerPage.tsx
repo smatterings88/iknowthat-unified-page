@@ -32,9 +32,6 @@ export function PlayerPage() {
         allow="camera; microphone; autoplay; fullscreen"
         allowFullScreen
       />
-      <div className="iframe-brand">
-        <img src="/brand/iknowthat-logo-dark.png" alt="I KNOW THAT!" />
-      </div>
 
       <ChatPanelShell onClose={() => setDrawerOpen(false)} />
 
