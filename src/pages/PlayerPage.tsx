@@ -1,15 +1,23 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertBanner } from "@/components/chat/AlertBanner";
 import { ChatPanelShell } from "@/components/chat/ChatPanelShell";
 import { SignUpScreen } from "@/components/player/SignUpScreen";
 import { WhatsAppFollow } from "@/components/player/WhatsAppFollow";
 import { Button } from "@/components/ui/button";
+import { useChat } from "@/hooks/useChat";
+import { usePresence } from "@/hooks/usePresence";
 import { useProfile } from "@/hooks/useProfile";
+import { useRoom } from "@/hooks/useRoom";
 import { buildCrowdpurrUrl } from "@/lib/crowdpurr";
 import { cn } from "@/lib/utils";
 
 export function PlayerPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
   const { status, profile, createProfile, retry } = useProfile();
+  const { messages, ready: chatReady, send } = useChat("ikt", profile?.nickname ?? null);
+  const { pin, alert, ready: roomReady } = useRoom("ikt");
+  usePresence("ikt");
 
   const iframeSrc = useMemo(() => {
     if (status !== "ready" || !profile) return null;
@@ -21,6 +29,34 @@ export function PlayerPage() {
     frozenSrcRef.current = iframeSrc;
   }
 
+  const primedUnreadRef = useRef(false);
+  const knownIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!chatReady) return;
+
+    const ids = new Set(messages.map((message) => message.id));
+    if (!primedUnreadRef.current) {
+      knownIdsRef.current = ids;
+      primedUnreadRef.current = true;
+      return;
+    }
+
+    let added = 0;
+    for (const message of messages) {
+      if (!knownIdsRef.current.has(message.id)) added += 1;
+    }
+    knownIdsRef.current = ids;
+
+    if (!drawerOpen && added > 0) {
+      setUnread((count) => count + added);
+    }
+  }, [chatReady, drawerOpen, messages]);
+
+  useEffect(() => {
+    if (drawerOpen) setUnread(0);
+  }, [drawerOpen]);
+
   function handleJoinToChat() {
     setDrawerOpen(false);
     window.setTimeout(() => {
@@ -30,6 +66,8 @@ export function PlayerPage() {
 
   return (
     <div className={cn("player-layout", drawerOpen && "drawer-open")}>
+      <AlertBanner alert={alert} ready={roomReady} />
+
       <header className="player-header">
         <div className="flex items-center justify-between gap-4 px-4 py-3">
           <img
@@ -77,6 +115,9 @@ export function PlayerPage() {
 
       <ChatPanelShell
         signedUp={status === "ready"}
+        messages={messages}
+        pin={pin}
+        onSend={send}
         onClose={() => setDrawerOpen(false)}
         onJoinToChat={handleJoinToChat}
       />
@@ -89,6 +130,7 @@ export function PlayerPage() {
         onClick={() => setDrawerOpen(true)}
       >
         Chat →
+        {unread > 0 ? <span className="chat-unread">{unread}</span> : null}
       </Button>
     </div>
   );
