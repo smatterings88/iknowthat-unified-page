@@ -10,6 +10,9 @@ interface ImportMetaEnv {
   readonly VITE_WHATSAPP_CHANNEL_URL: string;
   readonly VITE_TERMS_URL: string;
   readonly VITE_PRIVACY_URL: string;
+  readonly VITE_GAME_PRIVACY_URL: string;
+  readonly VITE_GAME_TERMS_URL: string;
+  readonly VITE_GAME_GDPR_URL: string;
 }
 
 interface ImportMeta {

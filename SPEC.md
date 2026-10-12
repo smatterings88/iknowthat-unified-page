@@ -1,6 +1,6 @@
 # I KNOW THAT! — Live Play Page Prototype (SPEC)
 
-Prototype in Cursor. Once Ken approves it, move it to Lovable. Build it on Lovable's front-end stack, with **Firebase** as the backend, so the move is a copy, not a rewrite.
+Prototype in Cursor and test it on Vercel. Once Ken approves it, rebuild it on Lovable with **Supabase** as the backend. The prototype uses Lovable's front-end stack so the front end moves over as a copy. The prototype backend is **Firebase**, so keep every backend call in small hooks; those are the only parts that get rewritten for Supabase.
 
 ## 1. Goal
 
@@ -21,8 +21,8 @@ Ken also gets a large-type **host screen** he can read during the show.
   - **Authentication:** anonymous sign-in for players, email/password for hosts
   - **Cloud Firestore:** chat, announcements, opt-ins
   - **Realtime Database:** presence only (who is on the page)
-  - **Hosting:** preview link
-- **No Next.js**, no server components, no Supabase
+- **Hosting:** Vercel, for preview and testing. Firebase is used only for Auth and the databases.
+- **No Next.js** and no server components. No Supabase in the prototype (the final Lovable version moves to Supabase).
 - **No Cloud Functions** in the prototype. All permissions come from Firestore Security Rules, so the project can stay on the free Spark plan.
 
 Env vars:
@@ -33,13 +33,16 @@ VITE_FIREBASE_AUTH_DOMAIN=
 VITE_FIREBASE_PROJECT_ID=
 VITE_FIREBASE_DATABASE_URL=
 VITE_FIREBASE_APP_ID=
-VITE_CROWDPURR_URL=https://playiknowthat.com
+VITE_CROWDPURR_URL=        # the Crowdpurr experience link that accepts ?f= and ?e= (see section 5)
 VITE_WHATSAPP_CHANNEL_URL=
 VITE_TERMS_URL=
 VITE_PRIVACY_URL=
+VITE_GAME_PRIVACY_URL=     # the three links on Crowdpurr's own sign-in screen
+VITE_GAME_TERMS_URL=
+VITE_GAME_GDPR_URL=
 ```
 
-Put all Firebase setup in one file, `src/lib/firebase.ts`, and keep Firestore reads and writes in small hooks (`useChat`, `useAnnouncements`, `usePresence`). That keeps the backend easy to swap out later.
+Put all Firebase setup in one file, `src/lib/firebase.ts`, and keep Firestore reads and writes in small hooks (`useProfile`, `useChat`, `useAnnouncements`, `usePresence`). That keeps the backend easy to swap out later.
 
 ## 3. Routes
 
@@ -69,21 +72,57 @@ Put all Firebase setup in one file, `src/lib/firebase.ts`, and keep Firestore re
 
 ### Hard rules for the iframe
 
-- Render the iframe **once**, at the root of the layout. It must **never unmount or reload** because of chat, drawer, alert, modal, QR popover, or resize state. Don't give it a changing `key`, don't render it conditionally, and don't move it to a different parent when the layout changes. Change the layout with CSS only.
-- `allow="camera; microphone; autoplay; fullscreen"` plus `allowfullscreen`.
+- Render the iframe **only once the player's nickname and email are known** (section 5), with its final `src` already built. Until then, the sign-up screen occupies the iframe's place in the layout. Never load an empty iframe and then change its `src`.
+- Once rendered, the iframe stays at the root of the layout and must **never unmount or reload** because of chat, drawer, alert, modal, QR popover, or resize state. Its `src` never changes during the session. Don't give it a changing `key`, and don't move it to a different parent when the layout changes. Change the layout with CSS only.
+- `allow="autoplay; fullscreen"` plus `allowfullscreen`. Players don't need camera or microphone.
 - Use `dvh` units (`h-[100dvh]`) so mobile browser bars don't cut it off.
 
-## 5. Chat
+## 5. Player sign-up and Crowdpurr auto-login
 
-**Identity (prototype):**
-- Sign every visitor in with Firebase **anonymous auth** when the page loads, so each person has a `uid` without a visible login.
-- The first time someone sends a message, ask for a display name (2–20 characters). Keep it in localStorage until that send. The Firestore `users/{uid}` write happens only in the same batched write as the message, not before.
+One sign-up on the play page identifies the player for both the game and chat. Crowdpurr's own sign-in form (nickname and email) is skipped because the page passes both values in the iframe link.
+
+**Crowdpurr feature used:** automatic participant login with URL query parameters (Seminar plan or higher). If every required lead-capture field is supplied, Crowdpurr skips its sign-in form. This experience asks only for nickname and email:
+
+| Parameter | Crowdpurr field |
+|-----------|-----------------|
+| `f`       | Nickname        |
+| `e`       | Email           |
+
+Build the link with `new URL(VITE_CROWDPURR_URL)` and `searchParams.set("f", nickname)` / `searchParams.set("e", email)`, keeping any parameters already on the link. Put the URL builder in `src/lib/crowdpurr.ts`.
+
+This is identification, not secure authentication. Anyone who knows a player's email can build their link. That's acceptable for the beta. Prize eligibility will need verified email later.
+
+**Page load:**
+1. Sign in with Firebase anonymous auth.
+2. Read `users/{uid}`. While this is loading, show a quiet loading state in the iframe's place. Don't flash the sign-up screen.
+3. If the profile exists, build the Crowdpurr link and render the iframe. No form is shown.
+4. If not, show the sign-up screen in the iframe's place.
+
+**Sign-up screen:** styled like the rest of the page (section 10), headline "JOIN THE GAME." Desktop: fills the game area, with chat still visible on the right. Mobile: fills the screen where the game will be, and the chat button still works.
+- **Nickname** (required): 2–20 characters, trimmed. Reject reserved names, case-insensitive: `ken`, `host`, `admin`, `moderator`, `crowdpurr`, `i know that`, `i know that!`. TODO: check Crowdpurr's own nickname limits and match them.
+- **Email** (required): basic format check, maximum 254 characters.
+- **Checkbox 1** (required): the Terms checkbox, verbatim from section 8.
+- **Checkbox 2** (optional, unchecked): the marketing email checkbox, verbatim from section 8.
+- Below the button, reproduce Crowdpurr's own consent line, because players no longer see Crowdpurr's form: "By signing in you accept our Privacy Policy, Terms & Conditions, & GDPR Compliance Policy." Link the three names to `VITE_GAME_PRIVACY_URL`, `VITE_GAME_TERMS_URL`, and `VITE_GAME_GDPR_URL`. TODO: the consent reviewer decides whether Checkbox 1 should also cover these.
+- Button: "JOIN THE GAME →", rainbow style.
+
+On submit, create `users/{uid}` with `nickname`, `email`, `consentTerms`, `consentMarketingEmail`, `consentedAt: serverTimestamp()`, and `source: "play-page-signup"`. Then render the iframe with the built link.
+
+**No editing in the prototype.** A player can't change their nickname or email after sign-up, because a new link would reload the game mid-show. A new browser or device means signing up again; Crowdpurr's returning-participant setting (section 9, setup) restores their player and score by email.
+
+**Privacy:** the email is readable only by its owner. It is never written to messages or anywhere other players can read.
+
+## 6. Chat
+
+**Identity:**
+- Chat uses the nickname from the player sign-up (section 5), so a player's chat name matches their game name.
+- Anyone can read chat before signing up. Until then, the chat input is replaced by a "JOIN THE GAME TO CHAT →" button that brings the player to the sign-up screen (on mobile, it closes the drawer).
 
 **Behavior:**
 - Use a Firestore `onSnapshot` listener on `rooms/ikt/messages`, filtered to `hidden == false`, ordered by `createdAt`, limited to the last 100 messages.
 - Auto-scroll to the newest message, unless the user has scrolled up. In that case, show a "New messages ↓" button.
 - Count unread messages while the mobile drawer is closed.
-- Limit each person to one message every 2 seconds, including hosts. Host messages use the same batched write. Enforce it in the Security Rules (see section 8), not just in the app. The 280-character maximum is also enforced in the rules.
+- Limit each person to one message every 2 seconds, including hosts. Host messages use the same batched write. Enforce it in the Security Rules (see section 9), not just in the app. The 280-character maximum is also enforced in the rules.
 - Use `serverTimestamp()` for `createdAt`. Never trust the device clock.
 - Hidden messages (moderation) disappear for everyone.
 
@@ -95,7 +134,7 @@ Put all Firebase setup in one file, `src/lib/firebase.ts`, and keep Firestore re
 
 **Alert banner:** When the host sends an alert, a pink banner appears over the page for 8 seconds, or until it's dismissed. Each alert has an `id`. A device starts the 8 seconds when it receives a new alert id. It does not time the banner from `sentAt`. On the first load, ignore an alert already on `rooms/ikt` if `sentAt` is more than 60 seconds old by the local clock.
 
-## 6. Host screen (`/host`)
+## 7. Host screen (`/host`)
 
 The screen asks Ken to sign in with email and password (Firebase Auth). It then reads `hosts/{uid}`. That read is allowed for the signed-in user. If the document does not exist, show "This account isn't set up as a host."
 
@@ -109,7 +148,7 @@ It's built for an iPad on a teleprompter, or a second screen, read from a distan
   - send an alert
   - hide a message (tap it, then confirm)
 
-## 7. WhatsApp and reminder sign-up
+## 8. WhatsApp and reminder sign-up
 
 **Follow on WhatsApp**
 
@@ -153,16 +192,20 @@ Footer line. "Privacy Policy" links to `VITE_PRIVACY_URL`. "Terms of Use" links 
 
 Submit button: "REMIND ME ABOUT THE NEXT GAME →", rainbow button style.
 
-Save the response to the `optIns` collection in Firestore, with a server timestamp for each consent. Map the four checkboxes to `consentTerms`, `consentMarketingEmail`, `consentSmsService`, and `consentSmsMarketing`.
+If the player has signed up (section 5), prefill email and first name (from the nickname) and let them edit both in this form. Save the response to the `optIns` collection in Firestore, with a server timestamp for each consent. Map the four checkboxes to `consentTerms`, `consentMarketingEmail`, `consentSmsService`, and `consentSmsMarketing`.
 
-## 8. Database (Firebase)
+## 9. Database (Firebase)
 
 ### Firestore structure
 
 ```
 hosts/{uid}                       { } or { name }
 
-users/{uid}                       { displayName, lastMessageAt }
+users/{uid}                       { nickname, email, consentTerms,
+                                    consentMarketingEmail, consentedAt,
+                                    source }
+
+rateLimits/{uid}                  { lastMessageAt }
 
 rooms/ikt                         { pin: { body, setAt } | null,
                                     alert: { id, body, sentAt } | null }
@@ -184,7 +227,7 @@ The pinned announcement and the alert live on the single `rooms/ikt` document, s
 
 ### Sending a message (rate limit)
 
-Each message is sent in a **batched write** that does two things at once: it creates the message, and it writes `users/{uid}` (merge) with the current `displayName` and `lastMessageAt: serverTimestamp()`. The rules reject the batch if the last message was less than 2 seconds ago. Hosts use this same batch and the same 2-second limit. The message `displayName` must match the `displayName` written on `users/{uid}` in that batch. The display name stays in localStorage until that first send.
+Each message is sent in a **batched write** that does two things at once: it creates the message, and it writes `rateLimits/{uid}` (merge) with `lastMessageAt: serverTimestamp()`. The rules reject the batch if the last message was less than 2 seconds ago. Hosts use this same batch and the same 2-second limit. A player message's `displayName` must equal the `nickname` on their `users/{uid}` profile. Host messages are exempt from that match (Ken's host account has no player profile, and "Ken" is a reserved player name).
 
 ### Security Rules (Firestore)
 
@@ -204,15 +247,38 @@ service cloud.firestore {
       allow write: if false;            // edit in the Firebase console only
     }
 
+    function validEmail(e) {
+      return e is string && e.size() <= 254
+        && e.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$');
+    }
+    function validNickname(n) {
+      return n is string && n.size() >= 2 && n.size() <= 20
+        && n == n.trim()
+        && !n.lower().matches('^(ken|host|admin|moderator|crowdpurr|i know that!?)$');
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'nickname', 'email', 'consentTerms', 'consentMarketingEmail',
+          'consentedAt', 'source'
+        ])
+        && validNickname(request.resource.data.nickname)
+        && validEmail(request.resource.data.email)
+        && request.resource.data.consentTerms == true
+        && request.resource.data.consentMarketingEmail is bool
+        && request.resource.data.consentedAt == request.time
+        && (!('source' in request.resource.data) || request.resource.data.source is string);
+      allow update, delete: if false;   // no editing in the prototype
+    }
+
+    match /rateLimits/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
       allow create, update: if signedIn() && request.auth.uid == uid
-        && request.resource.data.displayName is string
-        && request.resource.data.displayName.size() >= 2
-        && request.resource.data.displayName.size() <= 20
+        && request.resource.data.keys().hasOnly(['lastMessageAt'])
         && request.resource.data.lastMessageAt == request.time
         && (resource == null
-            || !('lastMessageAt' in resource.data)
             || request.time > resource.data.lastMessageAt + duration.value(2, 's'));
     }
 
@@ -229,14 +295,19 @@ service cloud.firestore {
           && request.resource.data.displayName is string
           && request.resource.data.displayName.size() >= 2
           && request.resource.data.displayName.size() <= 20
-          && request.resource.data.displayName == getAfter(/databases/$(db)/documents/users/$(request.auth.uid)).data.displayName
           && request.resource.data.body is string
           && request.resource.data.body.size() >= 1
           && request.resource.data.body.size() <= 280
           && request.resource.data.hidden == false
           && request.resource.data.createdAt == request.time
-          && (request.resource.data.isHost == false || isHost())
-          && getAfter(/databases/$(db)/documents/users/$(request.auth.uid))
+          && (
+            (request.resource.data.isHost == true && isHost())
+            || (request.resource.data.isHost == false
+                && exists(/databases/$(db)/documents/users/$(request.auth.uid))
+                && request.resource.data.displayName ==
+                   get(/databases/$(db)/documents/users/$(request.auth.uid)).data.nickname)
+          )
+          && getAfter(/databases/$(db)/documents/rateLimits/$(request.auth.uid))
                .data.lastMessageAt == request.time;
 
         allow update: if isHost()
@@ -299,8 +370,12 @@ Presence is world-readable for the prototype. Restrict this later.
 2. Create the Firestore database and the Realtime Database. Deploy both sets of rules and the composite index (keep them in the repo as `firestore.rules`, `database.rules.json`, `firestore.indexes.json`).
 3. Create Ken's host account. In Firestore, create `hosts/{his uid}`. An empty document is enough. Optional field: `name`.
 4. Create the `rooms/ikt` document with `pin: null, alert: null`.
+5. In Crowdpurr, confirm the plan includes automatic participant login (Seminar or higher). Set **Leads → Lead Capture Settings → Returning Participants**: Allow Participants To Sign Back In **on**, Allow Multiple Sign-Ins **off**, Email Address **required**. Make sure the only required lead-capture fields are nickname and email, or the sign-in form won't be skipped.
+6. Set `VITE_CROWDPURR_URL` to the experience link itself. If `playiknowthat.com` forwards to Crowdpurr, test whether `?f=` and `?e=` survive the forward; if not, use the direct Crowdpurr link.
+7. Add a `vercel.json` with a rewrite of all routes to `/index.html`, so `/host` and refreshes don't 404. Add every `VITE_*` value in Vercel's project settings and redeploy after changing any.
+8. Add the Vercel domain to Firebase Auth's authorized domains.
 
-## 9. Design system (taken from the live I KNOW THAT! landing page)
+## 10. Design system (taken from the live I KNOW THAT! landing page)
 
 Follow the landing page exactly. This page should look like the same site.
 
@@ -357,16 +432,27 @@ Keep these sampled values for the prototype.
 - Pinned announcement: a rainbow gradient bar with white Anton text.
 - Use the real logo files from Ken. **Don't redraw the logo.**
 
-## 10. Out of scope for the prototype
+## 11. Out of scope for the prototype
 
 These are not part of this build:
 - Crowdpurr stats or game data (Crowdpurr has no API)
 - Any WhatsApp bridge or embedded WhatsApp group
-- Login and accounts, prizes, payments, Shopify
+- Verified login (email codes, magic links, or phone verification). The section 5 sign-up identifies players; it doesn't authenticate them.
+- Editing a nickname or email after sign-up
+- Prizes, payments, Shopify
 - Text messages sent from GoHighLevel (collect consent only)
 
-## 11. Test checklist (real phones, especially iPhone Safari)
+## 12. Test checklist (real phones, especially iPhone Safari)
 
+- [ ] First visit: the sign-up screen shows in the game area. After joining, the game loads already signed in, with no Crowdpurr form.
+- [ ] Reload the page: no sign-up screen, the game is still signed in as the same player, with the same score.
+- [ ] iPhone Safari: sign up, play a question, reload the page mid-game. The player and score are kept.
+- [ ] Round 2: the player stays signed in when Crowdpurr moves to the Round 2 experience.
+- [ ] A second device with the same email restores the same player. Note what happens to the first device with multiple sign-ins off.
+- [ ] The nickname is identical in chat and in Crowdpurr.
+- [ ] Reserved nicknames are rejected, including by direct writes in the Rules Playground. A profile can't be edited after creation.
+- [ ] No other player can read anyone's email.
+- [ ] Before sign-up, chat is readable and the input shows "JOIN THE GAME TO CHAT →".
 - [ ] Open and close the chat drawer during a live question. The game and video keep playing, with no reload.
 - [ ] Focus the chat input on iPhone. The keyboard doesn't break the layout or squash the iframe, and the page doesn't zoom.
 - [ ] The video's sound plays. Note whether players need to tap once to start audio.
@@ -382,4 +468,4 @@ These are not part of this build:
 - [ ] The opt-in form saves all four consents separately, with a timestamp.
 - [ ] Rotate the phone between portrait and landscape. The iframe stays alive.
 
-Deploy a preview link with Firebase Hosting (`firebase hosting:channel:deploy preview`) so Ken can test it on his own phone.
+Deploy to Vercel so Ken can test it on his own phone. Deploy rules with `firebase deploy --only firestore:rules,firestore:indexes,database`.
